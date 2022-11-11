@@ -11,6 +11,7 @@ Simple to use discord bot that uses [AUTOMATIC1111's massively popular WebUI](ht
 ```kgen A bowl of fruit on a table```
 where ```k``` is the prefix and ```gen``` is the txt2img_command.
 ![Usage sample](https://iloveur.mom/i/YCLptuTBt4.jpg)
+- To use img2img, just upload an image, and use the same command and prompt in the message, or leave message empty for ??? result
 - For now, model swapping is done through the WebUI, like you normally would.
 
 
