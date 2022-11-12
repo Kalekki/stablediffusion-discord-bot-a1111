@@ -7,17 +7,18 @@ Simple to use discord bot that uses [AUTOMATIC1111's massively popular WebUI](ht
 - Install requirements if needed.  
 - Run WebUI  
 - Run bot.py  
-- Generate a picture by using prefix+txt2img_command followed by the prompt, for example:  
-```kgen A bowl of fruit on a table```
-where ```k``` is the prefix and ```gen``` is the txt2img_command.
-![Usage sample](https://iloveur.mom/i/YCLptuTBt4.jpg)
-- To use img2img, just upload an image, and use the same command and prompt in the message, or leave message empty for ??? result
-- For now, model swapping is done through the WebUI, like you normally would.
+- Use /txt2img or /img2img commands  
+
+![txt2img](https://iloveur.mom/i/iD60cesdiY.jpg)
+![img2img](https://iloveur.mom/i/znSRFQFbHI.jpg)
+
+
 
 
 ## Configuration
 Most of these are self explanatory. Don't use quotation marks.  
-positive_prompt gets added to the beginning on your prompt. Negative prompt gets sent as is. Included are NovelAI defaults.  
+For now, model swapping is done through the WebUI, like you normally would.  
+positive_prompt gets added to the beginning on your prompt. Negative prompt gets sent separately.
 
 
 ## Troubleshooting

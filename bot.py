@@ -1,60 +1,80 @@
 import base64
 import configparser
 import io
+from typing import Optional
+
 import discord
 import requests
+from discord import app_commands
 from PIL import Image
 
-## TODO:
-# - img2img
-#    Expose more options through the config file
+# TODO:
 # - Swapping models
-# - implement slash commands to enable multiple options, like size, seed etc.
+# - Restore faces
+# - Error handling
+# - Maybe encode pnginfo into the image, adds a bit of overhead but would enable getting parameters from pic
+
 
 config = configparser.ConfigParser()
 config.read('configuration.ini')
-token = config['Bot-settings']['bot_token']
-txt2img_command = config['Bot-settings']['bot_prefix']+config['Bot-settings']['txt2img_command']
+botsettings = config['Bot-settings']
+sdsettings = config['SD-settings']
+token = botsettings['bot_token']
 
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
+
+# Slash commands
+
+
+@tree.command(name="txt2img", description="Generate image from given prompt")
+async def text2img_command(interaction: discord.Interaction,
+                           prompt: str,
+                           steps: Optional[app_commands.Range[int, 10, 60]],
+                           negative_prompt: Optional[str],
+                           cfg_scale: Optional[app_commands.Range[float, 0.1, 30.0]],
+                           width: Optional[app_commands.Range[int, 256, 1024]],
+                           height: Optional[app_commands.Range[int, 256, 1024]],
+                           seed: Optional[app_commands.Range[int, -1, 999999999]],
+                           ):
+    await interaction.response.send_message("Generating...")
+    filename = text2img(prompt, negative_prompt, steps,
+                        cfg_scale, width, height, seed)
+    await interaction.edit_original_response(content=f"{prompt}", attachments=[discord.File(f"images/{filename}.png")])
+
+
+@tree.command(name="img2img", description="Generate image from given image")
+async def image2image_command(interaction: discord.Interaction,
+                              prompt: str,
+                              image: discord.Attachment,
+                              denoising_strength: Optional[app_commands.Range[float, 0.1, 1.0]],
+                              cfg_scale: Optional[app_commands.Range[float, 0.1, 30.0]],
+                              steps: Optional[app_commands.Range[int, 10, 60]],
+                              seed: Optional[app_commands.Range[int, -1, 999999999]],
+                              ):
+    await interaction.response.send_message("Generating...")
+    img = Image.open(io.BytesIO(await image.read()))
+    filename = img2img(img, prompt, denoising_strength, cfg_scale, steps, seed)
+    await interaction.edit_original_response(content=f"{prompt}", attachments=[discord.File(f"images/{filename}.png")])
+
 
 @client.event
 async def on_ready():
+    getSamplers()
+    print('------')
+    # getModels()
+    # print('------')
     print('Logged in as')
     print(client.user.name)
-    print('------')
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    if message.content.startswith(txt2img_command):
-        #check if message has embedded image
-        if len(message.attachments) > 0:
-            # Img2img
-            prompt = message.content.replace(txt2img_command, '')
-            img = Image.open(requests.get(message.attachments[0].url, stream=True).raw)
-            print(f"{message.author} used img2img with prompt: {prompt}")
-
-            async with message.channel.typing():
-                filename = img2img(img, prompt)
-                await message.channel.send(message.author.mention,file=discord.File(f'images/{filename}.png'))
-        else:
-            # Text2img
-            prompt = message.content.replace(txt2img_command, '')
-            print(f"{message.author} used txt2img with prompt: {prompt}")
-           
-            async with message.channel.typing():
-                filename = text2img(prompt)
-                await message.channel.send(message.author.mention,file=discord.File(f'images/{filename}.png'))
+    # Register commands manually, uncomment if you add/change commands or parameters
+    await tree.sync()
 
 
 def response_to_image(response, prompt):
     for i in response['images']:
-        image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
+        image = Image.open(io.BytesIO(base64.b64decode(i.split(",", 1)[0])))
         if len(prompt) > 40:
             prompt = prompt[:40]
         filename = ''.join(e for e in prompt if e.isalnum())
@@ -70,36 +90,80 @@ def response_to_image(response, prompt):
             f.close()
         return filename
 
-def text2img(prompt):
+
+def text2img(prompt, negative_prompt=None, steps=None, cfg_scale=None, width=None, height=None, seed=None):
+
+    # Set default values if not provided
+    steps = int(sdsettings['steps']) if steps is None else steps
+    cfg_scale = float(sdsettings['cfg_scale']
+                      ) if cfg_scale is None else cfg_scale
+    negative_prompt = sdsettings['negative_prompt'] if negative_prompt is None else negative_prompt
+    # Constrict width and height to powers of 64 otherwise SD gets angry
+    width = (int(sdsettings['width']) // 64) * \
+        64 if width is None else (width // 64) * 64
+    height = (int(sdsettings['height']) // 64) * \
+        64 if height is None else (height // 64) * 64
+    seed = -1 if seed is None else seed
+
     req = {
-        "prompt": config['SD-settings']['positive_prompt']+prompt,
-        "steps": config['SD-settings']['steps'],
-        "sampler": config['SD-settings']['sampler'],
-        "sampler_index": config['SD-settings']['sampler'],
-        "negative_prompt": config['SD-settings']['negative_prompt'],
-        "cfg_scale": config['SD-settings']['cfg_scale']
+        "prompt": sdsettings['positive_prompt']+prompt,
+        "steps": steps,
+        "sampler": sdsettings['sampler'],
+        "negative_prompt": negative_prompt,
+        "cfg_scale": cfg_scale,
+        "width": width,
+        "height": height,
+        "seed": seed,
     }
-    response = requests.post(url=f'http://{config["SD-settings"]["address"]}/sdapi/v1/txt2img', json=req)
+    response = requests.post(
+        url=f'http://{sdsettings["address"]}/sdapi/v1/txt2img', json=req)
     filename = response_to_image(response.json(), prompt)
     return filename
-                        
-def img2img(img, prompt):
+
+
+def img2img(img, prompt, denoising_strength=None, cfg_scale=None, steps=None, seed=None):
+    # Set default values if not provided
+    denoising_strength = float(
+        sdsettings['denoising_strength']) if denoising_strength is None else denoising_strength
+    cfg_scale = float(sdsettings['cfg_scale']
+                      ) if cfg_scale is None else cfg_scale
+    steps = int(sdsettings['steps']) if steps is None else steps
+    seed = -1 if seed is None else seed
+
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
     img_byte_arr = img_byte_arr.getvalue()
     img_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
-    url = f'http://{config["SD-settings"]["address"]}/sdapi/v1/img2img'
+    url = f'http://{sdsettings["address"]}/sdapi/v1/img2img'
     req = {
         "init_images": ["data:image/png;base64," + img_base64],
         "prompt": prompt,
-        "negative_prompt": config['SD-settings']['negative_prompt'],
-        "steps": config['SD-settings']['steps'],
+        "steps": steps,
+        "cfg_scale": cfg_scale,
+        "denoising_strength": denoising_strength,
+        "seed": seed,
         "include_init_images": False,
-        "sampler": config['SD-settings']['sampler'],
-        "sampler_index": config['SD-settings']['sampler']
+        "sampler": sdsettings['sampler'],
     }
     response = requests.post(url, json=req)
     filename = response_to_image(response.json(), prompt)
     return filename
+
+
+def getSamplers():
+    url = f'http://{sdsettings["address"]}/sdapi/v1/samplers'
+    response = requests.get(url)
+    print("Available samplers:")
+    for i in response.json():
+        print(i['name'])
+
+
+def getModels():
+    url = f'http://{sdsettings["address"]}/sdapi/v1/sd-models'
+    response = requests.get(url)
+    print("Available models:")
+    for i in response.json():
+        print(i['model_name'])
+
 
 client.run(token)
