@@ -37,7 +37,7 @@ async def text2img_command(interaction: discord.Interaction,
                            cfg_scale: Optional[app_commands.Range[float, 0.1, 30.0]],
                            width: Optional[app_commands.Range[int, 256, 1024]],
                            height: Optional[app_commands.Range[int, 256, 1024]],
-                           seed: Optional[app_commands.Range[int, -1, 999999999]],
+                           seed: Optional[app_commands.Range[int, -1, 9999999999]],
                            ):
     await interaction.response.send_message("Generating...")
     filename = text2img(prompt, negative_prompt, steps,
@@ -52,7 +52,7 @@ async def image2image_command(interaction: discord.Interaction,
                               denoising_strength: Optional[app_commands.Range[float, 0.1, 1.0]],
                               cfg_scale: Optional[app_commands.Range[float, 0.1, 30.0]],
                               steps: Optional[app_commands.Range[int, 10, 60]],
-                              seed: Optional[app_commands.Range[int, -1, 999999999]],
+                              seed: Optional[app_commands.Range[int, -1, 9999999999]],
                               ):
     await interaction.response.send_message("Generating...")
     img = Image.open(io.BytesIO(await image.read()))
