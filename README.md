@@ -7,8 +7,8 @@ Simple to use discord bot that uses [AUTOMATIC1111's massively popular WebUI](ht
 - Run WebUI  
 - Run start_bot
 - Use /txt2img or /img2img commands  
-
-![txt2img](https://iloveur.mom/i/iD60cesdiY.jpg)
+![Example](https://iloveur.mom/i/3l5RNvhKzh.gif)  
+![txt2img](https://iloveur.mom/i/iD60cesdiY.jpg)  
 ![img2img](https://iloveur.mom/i/znSRFQFbHI.jpg)
 
 
