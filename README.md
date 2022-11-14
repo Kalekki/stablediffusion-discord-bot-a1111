@@ -4,9 +4,8 @@ Simple to use discord bot that uses [AUTOMATIC1111's massively popular WebUI](ht
 ## Usage instructions
 - Make sure to add ```--api``` to WebUI's commandline args.  
 - Configure settings in configuration.ini  
-- Install requirements if needed.  
 - Run WebUI  
-- Run bot.py  
+- Run start_bot
 - Use /txt2img or /img2img commands  
 
 ![txt2img](https://iloveur.mom/i/iD60cesdiY.jpg)
@@ -22,6 +21,4 @@ positive_prompt gets added to the beginning on your prompt. Negative prompt gets
 
 
 ## Troubleshooting
-If you get an error about missing modules, install them using pip.  
-  
 For errors during image generation, check response.json  
