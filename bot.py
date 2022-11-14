@@ -7,9 +7,11 @@ from typing import Optional
 import discord
 import requests
 from discord import app_commands
+from discord.ui import Button, View
 from PIL import Image, PngImagePlugin
 
 # TODO:
+# - Buttons for Regenerate, Variant, Upscale
 # - Restore faces
 # - Error handling
 # - Variation generation (NovelAI uses img2img with same prompt, seed+1, denoising_strength 0.8)
@@ -65,7 +67,7 @@ async def text2img_command(interaction: discord.Interaction,
         inline=True)
     embed.set_footer(text=f"Generation took: {time_took}s")
 
-    await interaction.edit_original_response(content=f"{interaction.user.mention} Your image is ready!", attachments=[discord.File(f"images/{filename}.png")], embed=embed)
+    await interaction.edit_original_response(content=f"{interaction.user.mention} Your image is ready!", attachments=[discord.File(f"images/{filename}.png")], embed=embed, view=view)
 
 
 @tree.command(name="img2img", description="Generate image from given image")
