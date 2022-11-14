@@ -1,0 +1,5 @@
+.DS_Store
+.vscode
+response.json
+configuration.ini
+/images/*.png
