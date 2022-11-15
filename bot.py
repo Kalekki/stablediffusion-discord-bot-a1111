@@ -11,6 +11,7 @@ from discord.ui import Button, View
 from PIL import Image, PngImagePlugin
 
 # TODO:
+# - Restrict buttons to the user who requested the pic
 # - Restore faces
 # - Have the view be a class for reuse with img2img
 #       Remove the buttons after some time.
@@ -26,6 +27,7 @@ sdsettings = config['SD-settings']
 token = botsettings['bot_token']
 max_size = int(sdsettings['max_size'])
 
+# Discord stuff
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -44,18 +46,18 @@ async def text2img_command(interaction: discord.Interaction,
                            seed: Optional[app_commands.Range[int, -1, 0xFFFFFFFF]],
                            high_resolution_fix: Optional[bool]
                            ):
+
     await interaction.response.send_message("Generating...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = text2img(prompt, negative_prompt, steps,
                         cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
-    _filename = filename # needed for variant generation
     time_took = round((datetime.datetime.now(
     ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
 
     # Create discord embed out of the image
     view = View()
-    view.timeout = 3000
-    embed = create_embed(filename,prompt,time_took)
+    view.timeout = 180
+    embed = create_embed(filename, prompt, time_took)
 
     # Regenerate
     async def regenerate_callback(interaction: discord.Interaction):
@@ -63,24 +65,29 @@ async def text2img_command(interaction: discord.Interaction,
         await interaction.response.defer()
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         text2img(prompt, negative_prompt, steps,
-                            cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
+                 cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
         time_took = round((datetime.datetime.now(
         ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
         # Create discord embed out of the image
         embed = create_embed(filename, prompt, time_took)
         await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
 
+    # Variant
     async def variant_callback(interaction: discord.Interaction):
         await interaction.response.defer()
+        img_from_embed = interaction.message.embeds[0].image.url
+        img_from_embed = img_from_embed.split('/')[-1]
         # Get generated image and its seed
-        img = Image.open(f'images/{_filename}.png')
-        img_info = read_png_info(f'images/{_filename}.png')
+        img = Image.open(f'images/{img_from_embed}')
+        img_info = read_png_info(f'images/{img_from_embed}')
         seed = int(img_info['seed'])
         negative_prompt = img_info['negative_prompt']
+        full_prompt = img_info['prompt']
 
-        #Measure how long it took to generate the image
+        # Measure how long it took to generate the image
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        filename = img2img(img, prompt,negative_prompt=negative_prompt, denoising_strength=0.7, seed=int(seed)+1)
+        filename = img2img(img, full_prompt, negative_prompt=negative_prompt,
+                           denoising_strength=sdsettings['variant_denoising_strength'], seed=int(seed)+1)
         time_took = round((datetime.datetime.now(
         ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
 
@@ -88,22 +95,19 @@ async def text2img_command(interaction: discord.Interaction,
         embed = create_embed(filename, prompt, time_took)
         await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
 
+    # Upscale
     async def upscale_callback(interaction: discord.Interaction):
         await interaction.response.defer()
         # Get generated image and its seed
-        img = Image.open(f'images/{_filename}.png')
+        img_from_embed = interaction.message.embeds[0].image.url
+        img_from_embed = img_from_embed.split('/')[-1]
+        img = Image.open(f'images/{img_from_embed}')
 
-        #Measure how long it took to generate the image
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         upscaled_file = upscale(img, prompt)
-        time_took = round((datetime.datetime.now(
-        ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
-
         # Follow up with the upscaled image
-        await interaction.followup.send("2x Upscaled image",ephemeral=True,files=[discord.File(f'images/{upscaled_file}.png')])
+        await interaction.followup.send("2x Upscaled image", ephemeral=True, files=[discord.File(f'images/{upscaled_file}.png')])
 
-
-    # Buttons for Regenerate, Variant, Upscale with callbacks
+    # Buttons for the view
     regenerate_button = Button(label="Regenerate", style=discord.ButtonStyle.blurple)
     variant_button = Button(label="Variant", style=discord.ButtonStyle.blurple)
     upscale_button = Button(label="Upscale", style=discord.ButtonStyle.blurple)
@@ -130,14 +134,18 @@ async def image2image_command(interaction: discord.Interaction,
     await interaction.response.send_message("Generating...")
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     img = Image.open(io.BytesIO(await image.read()))
-    filename = img2img(img, prompt,negative_prompt, denoising_strength, cfg_scale, steps, seed)
+    filename = img2img(img, prompt, negative_prompt,
+                       denoising_strength, cfg_scale, steps, seed)
     time_took = round((datetime.datetime.now(
     ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
 
     # Create discord embed out of the image
     embed = create_embed(filename, prompt, time_took)
 
-    await interaction.edit_original_response(content=f"{interaction.user.mention} Your image is ready!", attachments=[discord.File(f"images/{filename}.png")], embed=embed)
+    await interaction.edit_original_response(content=f"{interaction.user.mention} Your image is ready!",
+                                             attachments=[discord.File(
+                                                 f"images/{filename}.png")],
+                                             embed=embed)
 
 
 @client.event
@@ -147,16 +155,17 @@ async def on_ready():
     print(client.user.name)
     # Register commands manually, uncomment if you add/change commands or parameters
     try:
-        await tree.sync()
+       await tree.sync()
     except Exception as e:
-        print(f'Failed to sync bot commands with Discord, {e}')
+       print(f'Failed to sync bot commands with Discord, {e}')
 
 
 def response_to_image(response, prompt):
-    #if response has 'images' key, from txt2img or img2img, else its upscaled
+    # if response has 'images' key, from txt2img or img2img, else its upscaled
     if 'images' in response:
         for i in response['images']:
-            image = Image.open(io.BytesIO(base64.b64decode(i.split(",", 1)[0])))
+            image = Image.open(io.BytesIO(
+                base64.b64decode(i.split(",", 1)[0])))
             if len(prompt) > 40:
                 prompt = prompt[:40]
             filename = ''.join(e for e in prompt if e.isalnum())
@@ -177,6 +186,7 @@ def response_to_image(response, prompt):
             with open('response.json', 'w') as f:
                 f.write(str(response))
                 f.close()
+
             return filename
     else:
         image = Image.open(io.BytesIO(base64.b64decode(response['image'])))
@@ -189,9 +199,7 @@ def response_to_image(response, prompt):
         return filename+'x2'
 
 
-
 def text2img(prompt, negative_prompt=None, steps=None, cfg_scale=None, width=None, height=None, seed=None, enable_hr=None):
-
     # Set default values if not provided
     steps = int(sdsettings['steps']) if steps is None else steps
     cfg_scale = float(sdsettings['cfg_scale']
@@ -221,7 +229,8 @@ def text2img(prompt, negative_prompt=None, steps=None, cfg_scale=None, width=Non
     filename = response_to_image(response.json(), prompt)
     if enable_hr:
         img = Image.open(f'images/{filename}.png')
-        filename = img2img(img, prompt,negative_prompt, 0.7, cfg_scale, steps, seed)
+        filename = img2img(img, prompt, negative_prompt,
+                           0.7, cfg_scale, steps, seed)
     return filename
 
 
@@ -238,9 +247,11 @@ def img2img(img, prompt, negative_prompt=None, denoising_strength=None, cfg_scal
     # Resize if needed
     if img.width > max_size or img.height > max_size:
         if img.width > img.height:
-            img = img.resize((max_size, int(max_size * img.height / img.width)))
+            img = img.resize(
+                (max_size, int(max_size * img.height / img.width)))
         else:
-            img = img.resize((int(max_size * img.width / img.height), max_size))
+            img = img.resize(
+                (int(max_size * img.width / img.height), max_size))
 
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='PNG')
@@ -329,8 +340,9 @@ def read_png_info(filename):
             }
             return info_obj
 
+
 def create_embed(filename, prompt, time_took):
-# Create discord embed out of the image
+    # Create discord embed out of the image
     embed = discord.Embed(title=prompt, color=0xffff00)
     embed.set_image(url=f"attachment://{filename}.png")
     img_info = read_png_info(f'images/{filename}.png')
@@ -341,9 +353,9 @@ def create_embed(filename, prompt, time_took):
         embed.add_field(name="Negative prompt",
                         value=f"{img_info['negative_prompt']}", inline=False)
     embed.add_field(
-        name="Settings", 
+        name="Settings",
         value=f"Steps: `{img_info['steps']}`, Sampler: `{img_info['sampler']}`, Size: `{img_info['size']}`, \
-                CFG Scale: `{img_info['cfg_scale']}`, Seed: `{img_info['seed']}`, Denoising Strength: `{img_info['denoising_strength']}`",
+             CFG Scale: `{img_info['cfg_scale']}`, Seed: `{img_info['seed']}`, Denoising Strength: `{img_info['denoising_strength']}`",
         inline=True)
     embed.set_footer(text=f"Generation took: {time_took}s")
     return embed
