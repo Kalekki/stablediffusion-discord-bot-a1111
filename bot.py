@@ -11,7 +11,6 @@ from discord.ui import Button, View
 from PIL import Image, PngImagePlugin
 
 # TODO:
-# - Restrict buttons to the user who requested the pic
 # - Restore faces
 # - Have the view be a class for reuse with img2img
 #       Remove the buttons after some time.
@@ -61,39 +60,45 @@ async def text2img_command(interaction: discord.Interaction,
 
     # Regenerate
     async def regenerate_callback(interaction: discord.Interaction):
-        # modify original message with new image
-        await interaction.response.defer()
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        text2img(prompt, negative_prompt, steps,
-                 cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
-        time_took = round((datetime.datetime.now(
-        ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
-        # Create discord embed out of the image
-        embed = create_embed(filename, prompt, time_took)
-        await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
+        if interaction.user.id == interaction.message.mentions[0].id:
+            # modify original message with new image
+            await interaction.response.defer()
+            timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            text2img(prompt, negative_prompt, steps,
+                    cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
+            time_took = round((datetime.datetime.now(
+            ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
+            # Create discord embed out of the image
+            embed = create_embed(filename, prompt, time_took)
+            await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
+        else:
+            await interaction.response.send_message("You can't modify someone else's images", ephemeral=True)
 
     # Variant
     async def variant_callback(interaction: discord.Interaction):
-        await interaction.response.defer()
-        img_from_embed = interaction.message.embeds[0].image.url
-        img_from_embed = img_from_embed.split('/')[-1]
-        # Get generated image and its seed
-        img = Image.open(f'images/{img_from_embed}')
-        img_info = read_png_info(f'images/{img_from_embed}')
-        seed = int(img_info['seed'])
-        negative_prompt = img_info['negative_prompt']
-        full_prompt = img_info['prompt']
+        if interaction.user.id == interaction.message.mentions[0].id:
+            await interaction.response.defer()
+            img_from_embed = interaction.message.embeds[0].image.url
+            img_from_embed = img_from_embed.split('/')[-1]
+            # Get generated image and its seed
+            img = Image.open(f'images/{img_from_embed}')
+            img_info = read_png_info(f'images/{img_from_embed}')
+            seed = int(img_info['seed'])
+            negative_prompt = img_info['negative_prompt']
+            full_prompt = img_info['prompt']
 
-        # Measure how long it took to generate the image
-        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        filename = img2img(img, full_prompt, negative_prompt=negative_prompt,
-                           denoising_strength=sdsettings['variant_denoising_strength'], seed=int(seed)+1)
-        time_took = round((datetime.datetime.now(
-        ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
+            # Measure how long it took to generate the image
+            timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            filename = img2img(img, full_prompt, negative_prompt=negative_prompt,
+                            denoising_strength=sdsettings['variant_denoising_strength'], seed=int(seed)+1)
+            time_took = round((datetime.datetime.now(
+            ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
 
-        # Create discord embed out of the image
-        embed = create_embed(filename, prompt, time_took)
-        await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
+            # Create discord embed out of the image
+            embed = create_embed(filename, prompt, time_took)
+            await interaction.message.edit(embed=embed, view=view, attachments=[discord.File(f'images/{filename}.png')])
+        else:
+            await interaction.response.send_message("You can't modify someone else's images", ephemeral=True)
 
     # Upscale
     async def upscale_callback(interaction: discord.Interaction):
