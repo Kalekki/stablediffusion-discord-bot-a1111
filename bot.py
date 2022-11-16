@@ -16,7 +16,6 @@ from PIL import Image, PngImagePlugin
 #       Remove the buttons after some time.
 # - Error handling
 # - Clean this shit up
-#       Upscale is very hacky, ideally we'd want it to only affect the embed image while keeping the parameters
 
 
 config = configparser.ConfigParser()
@@ -65,7 +64,7 @@ async def text2img_command(interaction: discord.Interaction,
             await interaction.response.defer()
             timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
             text2img(prompt, negative_prompt, steps,
-                    cfg_scale, width, height, seed, enable_hr=high_resolution_fix)
+                    cfg_scale, width, height, seed=-1, enable_hr=high_resolution_fix)
             time_took = round((datetime.datetime.now(
             ) - datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")).total_seconds(), 2)
             # Create discord embed out of the image
